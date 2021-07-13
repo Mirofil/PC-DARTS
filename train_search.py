@@ -303,7 +303,6 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr,e
 
   return top1.avg, objs.avg
 
-
 def infer(valid_queue, model, criterion):
   objs = utils.AvgrageMeter()
   top1 = utils.AvgrageMeter()
