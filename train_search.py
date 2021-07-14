@@ -51,6 +51,10 @@ parser.add_argument('--train_portion', type=float, default=0.5, help='portion of
 parser.add_argument('--unrolled', action='store_true', default=False, help='use one-step unrolled validation loss')
 parser.add_argument('--arch_learning_rate', type=float, default=6e-4, help='learning rate for arch encoding')
 parser.add_argument('--arch_weight_decay', type=float, default=1e-3, help='weight decay for arch encoding')
+
+
+parser.add_argument('--hessian', type=lambda x: False if x in ["False", "false", "", "None", False, None] else True, default=True,
+                    help='Warm start one-shot model before starting architecture updates.')
 args = parser.parse_args()
 
 args.save = 'search-{}-{}'.format(args.save, args.seed)
@@ -220,7 +224,7 @@ def main():
     start_epoch=0
     all_logs=[]
 
-  for epoch in range(args.epochs):
+  for epoch in tqdm(range(args.epochs), desc = "Iterating over epochs"):
     scheduler.step()
     lr = scheduler.get_lr()[0]
     logging.info('epoch %d lr %e', epoch, lr)
