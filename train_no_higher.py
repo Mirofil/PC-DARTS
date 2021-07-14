@@ -89,7 +89,20 @@ fh = logging.FileHandler(os.path.join(args.save, 'log.txt'))
 fh.setFormatter(logging.Formatter(log_format))
 logging.getLogger().addHandler(fh)
 
+def get_torch_home():
+    if "TORCH_HOME" in os.environ:
+        return os.environ["TORCH_HOME"]
+    elif os.path.exists('/storage/.torch/'):
+        return os.path.join('/storage/', ".torch")
 
+    elif "HOME" in os.environ:
+        return os.path.join(os.environ["HOME"], ".torch")
+    else:
+        raise ValueError(
+            "Did not find HOME in os.environ. "
+            "Please at least setup the path of HOME or TORCH_HOME "
+            "in the environment."
+        )
 def wandb_auth(fname: str = "nas_key.txt"):
   gdrive_path = "/content/drive/MyDrive/colab/wandb/nas_key.txt"
   if "WANDB_API_KEY" in os.environ:
@@ -125,7 +138,7 @@ def wandb_auth(fname: str = "nas_key.txt"):
   
 def load_nb301():
     version = '0.9'
-    current_dir = os.path.dirname(os.path.abspath(__file__))
+    current_dir = os.path.dirname(get_torch_home())
     models_0_9_dir = os.path.join(current_dir, 'nb_models_0.9')
     model_paths_0_9 = {
         model_name : os.path.join(models_0_9_dir, '{}_v0.9'.format(model_name))
