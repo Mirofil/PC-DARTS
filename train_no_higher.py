@@ -300,7 +300,7 @@ def main():
     # utils.save(model, os.path.join(args.save, 'weights.pt'))
 
 
-def train_higher(train_queue, valid_queue, network, architect, criterion, w_optimizer, a_optimizer, lr, logger=None, 
+def train_higher(train_queue, valid_queue, network, architect, criterion, w_optimizer, a_optimizer, logger=None, 
                  inner_steps=100, epoch=0, steps_per_epoch=None, warm_start=15):
   objs = utils.AvgrageMeter()
   top1 = utils.AvgrageMeter()
