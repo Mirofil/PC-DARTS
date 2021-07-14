@@ -214,6 +214,7 @@ def main():
   api = load_nb301()
 
   if os.path.exists(Path(args.save) / "checkpoint.pt"):
+    print(f"Loading checkpoint")
     checkpoint = torch.load(Path(args.save) / "checkpoint.pt")
     optimizer.load_state_dict(checkpoint["w_optimizer"])
     architect.optimizer.load_state_dict(checkpoint["a_optimizer"])
@@ -227,7 +228,7 @@ def main():
     start_epoch=0
     all_logs=[]
 
-  for epoch in tqdm(range(args.epochs), desc = "Iterating over epochs"):
+  for epoch in tqdm(range(start_epoch, args.epochs), desc = "Iterating over epochs"):
     scheduler.step()
     lr = scheduler.get_lr()[0]
     logging.info('epoch %d lr %e', epoch, lr)
