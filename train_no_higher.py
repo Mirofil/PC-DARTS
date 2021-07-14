@@ -252,10 +252,9 @@ def main():
                                         epoch=epoch, logger=logger, steps_per_epoch=args.steps_per_epoch, warm_start=args.warm_start)
     logging.info('train_acc %f', train_acc)
 
-    # validation
-    if args.epochs-epoch<=1:
-      valid_acc, valid_obj = infer(valid_queue, model, criterion)
-      logging.info('valid_acc %f', valid_acc)
+
+    valid_acc, valid_obj = infer(valid_queue, model, criterion)
+    logging.info('valid_acc %f', valid_acc)
 
 
     if False and args.hessian and torch.cuda.get_device_properties(0).total_memory < 20147483648: # doesnt work anywhere
@@ -381,6 +380,8 @@ def infer(valid_queue, model, criterion):
 
   with torch.no_grad():
     for step, (input, target) in enumerate(valid_queue):
+      if step > 25:
+        break
       #input = input.cuda()
       #target = target.cuda(non_blocking=True)
       input = Variable(input).cuda()
