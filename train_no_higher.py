@@ -314,9 +314,9 @@ def train_higher(train_queue, valid_queue, network, architect, criterion, w_opti
     if steps_per_epoch is not None and data_step > steps_per_epoch:
       break    
     network.train()
-    n = input.size(0)
-    input = Variable(input, requires_grad=False).cuda()
-    target = Variable(target, requires_grad=False).cuda()
+    n = base_inputs.size(0)
+    base_inputs = Variable(base_inputs, requires_grad=False).cuda()
+    base_targets = Variable(base_targets, requires_grad=False).cuda()
 
     all_base_inputs, all_base_targets, all_arch_inputs, all_arch_targets = format_input_data(base_inputs, base_targets, arch_inputs, arch_targets, 
                                                                                               search_loader_iter, inner_steps=100, args=args)
@@ -362,16 +362,6 @@ def train_higher(train_queue, valid_queue, network, architect, criterion, w_opti
         base_loss.backward()
         w_optimizer.step()
         n = base_inputs.size(0)
-
-
-        # logits = network(base_inputs)
-        # loss = criterion(logits, base_targets)
-
-        # loss.backward()
-        # nn.utils.clip_grad_norm_(network.parameters(), args.grad_clip)
-        # w_optimizer.step()
-        # w_optimizer.zero_grad()
-        # architect.optimizer.zero_grad()
 
         prec1, prec5 = utils.accuracy(logits, base_targets, topk=(1, 5))
 
