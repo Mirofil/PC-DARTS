@@ -349,9 +349,9 @@ def train_higher(train_queue, valid_queue, network, architect, criterion, w_opti
         
       new_arch = deepcopy(network._arch_parameters)
       network.load_state_dict(model_init)
-    #   network._arch_parameters = new_arch
-      network.alphas_normal.data = new_arch[0].data
-      network.alphas_reduce.data = new_arch[1].data
+      
+      for p1, p2 in zip(network.arch_parameters(), new_arch):
+        p1.data = p2.data
         
       for inner_step, (base_inputs, base_targets, arch_inputs, arch_targets) in enumerate(zip(all_base_inputs, all_base_targets, all_arch_inputs, all_arch_targets)):
         if data_step in [0, 1] and inner_step < 3 and epoch % 5 == 0:
@@ -396,9 +396,9 @@ def infer(valid_queue, model, criterion):
 
       prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
       n = input.size(0)
-      objs.update(loss.data[0], n)
-      top1.update(prec1.data[0], n)
-      top5.update(prec5.data[0], n)
+      objs.update(loss.item(), n)
+      top1.update(prec1.item(), n)
+      top5.update(prec5.item(), n)
 
       if step % args.report_freq == 0:
         logging.info('valid %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
