@@ -175,7 +175,10 @@ def main():
   model = Network(args.init_channels, CIFAR_CLASSES, args.layers, criterion)
   model = model.cuda()
   logging.info("param size = %fMB", utils.count_parameters_in_MB(model))
-
+  
+  wandb_auth()
+  run = wandb.init(project="NAS", group=f"Search_Cell_pcdarts", reinit=True)
+  
   optimizer = torch.optim.SGD(
       model.parameters(),
       args.learning_rate,
