@@ -26,6 +26,7 @@ from tqdm import tqdm
 from utils import genotype_depth, genotype_width
 from visualize import plot
 from sotl_utils import format_input_data, fo_grad_if_possible, hyper_meta_step, hypergrad_outer, approx_hessian, exact_hessian
+from copy import deepcopy
 
 parser = argparse.ArgumentParser("cifar")
 parser.add_argument('--data', type=str, default='../data', help='location of the data corpus')
@@ -51,9 +52,30 @@ parser.add_argument('--train_portion', type=float, default=0.5, help='portion of
 parser.add_argument('--unrolled', action='store_true', default=False, help='use one-step unrolled validation loss')
 parser.add_argument('--arch_learning_rate', type=float, default=6e-4, help='learning rate for arch encoding')
 parser.add_argument('--arch_weight_decay', type=float, default=1e-3, help='weight decay for arch encoding')
+
+parser.add_argument('--steps_per_epoch', type=float, default=None, help='weight decay for arch encoding')
+
+parser.add_argument('--higher_method' ,       type=str, choices=['val', 'sotl', "val_multiple"],   default='sotl', help='Whether to take meta gradients with respect to SoTL or val set (which might be the same as training set if they were merged)')
+parser.add_argument('--higher_params' ,       type=str, choices=['weights', 'arch'],   default='arch', help='Whether to do meta-gradients with respect to the meta-weights or architecture')
+parser.add_argument('--higher_order' ,       type=str, choices=['first', 'second', None],   default="first", help='Whether to do meta-gradients with respect to the meta-weights or architecture')
+parser.add_argument('--higher_loop' ,       type=str, choices=['bilevel', 'joint'],   default="bilevel", help='Whether to make a copy of network for the Higher rollout or not. If we do not copy, it will be as in joint training')
+parser.add_argument('--higher_reduction' ,       type=str, choices=['mean', 'sum'],   default='sum', help='Reduction across inner steps - relevant for first-order approximation')
+parser.add_argument('--higher_reduction_outer' ,       type=str, choices=['mean', 'sum'],   default='sum', help='Reduction across the meta-betach size')
+parser.add_argument('--meta_algo' ,       type=str, choices=['reptile', 'metaprox', 'darts_higher', "gdas_higher", "setn_higher", "enas_higher"],   default=None, help='Whether to do meta-gradients with respect to the meta-weights or architecture')
+
+parser.add_argument('--hessian', type=lambda x: False if x in ["False", "false", "", "None", False, None] else True, default=True,
+                    help='Warm start one-shot model before starting architecture updates.')
+parser.add_argument('--warm_start', type=int, default=None, help='Warm start for weights before updating architecture')
+parser.add_argument('--primitives', type=str, default=None, help='Primitives operations set')
+
+parser.add_argument('--inner_steps_same_batch' ,       type=lambda x: False if x in ["False", "false", "", "None", False, None] else True,   default=False, help='Number of steps to do in the inner loop of bilevel meta-learning')
+parser.add_argument('--mode' ,       type=str,   default="higher", choices=["higher", "reptile"], help='Number of steps to do in the inner loop of bilevel meta-learning')
+parser.add_argument('--inner_steps', type=int, default=100, help='Steps for inner loop of bilevel')
+
+
 args = parser.parse_args()
 
-args.save = 'search-{}-{}'.format(args.save, args.seed)
+args.save = 'search-no_higher-{}-{}'.format(args.save, args.seed)
 
 try:
   utils.create_exp_dir(args.save, scripts_to_save=glob.glob('*.py'))
@@ -67,21 +89,7 @@ fh = logging.FileHandler(os.path.join(args.save, 'log.txt'))
 fh.setFormatter(logging.Formatter(log_format))
 logging.getLogger().addHandler(fh)
 
-def get_torch_home():
-    if "TORCH_HOME" in os.environ:
-        return os.environ["TORCH_HOME"]
-    elif os.path.exists('/storage/.torch/'):
-        return os.path.join('/storage/', ".torch")
 
-    elif "HOME" in os.environ:
-        return os.path.join(os.environ["HOME"], ".torch")
-    else:
-        raise ValueError(
-            "Did not find HOME in os.environ. "
-            "Please at least setup the path of HOME or TORCH_HOME "
-            "in the environment."
-        )
-        
 def wandb_auth(fname: str = "nas_key.txt"):
   gdrive_path = "/content/drive/MyDrive/colab/wandb/nas_key.txt"
   if "WANDB_API_KEY" in os.environ:
@@ -117,7 +125,7 @@ def wandb_auth(fname: str = "nas_key.txt"):
   
 def load_nb301():
     version = '0.9'
-    current_dir = os.path.dirname(get_torch_home())
+    current_dir = os.path.dirname(os.path.abspath(__file__))
     models_0_9_dir = os.path.join(current_dir, 'nb_models_0.9')
     model_paths_0_9 = {
         model_name : os.path.join(models_0_9_dir, '{}_v0.9'.format(model_name))
@@ -238,7 +246,9 @@ def main():
     #print(F.softmax(model.alphas_reduce, dim=-1))
 
     # training
-    train_acc, train_obj = train(train_queue, valid_queue, model, architect, criterion, optimizer, lr,epoch)
+    train_acc, train_obj = train_higher(train_queue=train_queue, valid_queue=valid_queue, network=model, architect=architect, 
+                                        criterion=criterion, w_optimizer=optimizer, a_optimizer=architect.optimizer, 
+                                        epoch=epoch, logger=logger, steps_per_epoch=args.steps_per_epoch, warm_start=args.warm_start)
     logging.info('train_acc %f', train_acc)
 
     # validation
@@ -275,45 +285,90 @@ def main():
     # utils.save(model, os.path.join(args.save, 'weights.pt'))
 
 
-def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr,epoch):
+def train_higher(train_queue, valid_queue, network, architect, criterion, w_optimizer, a_optimizer, lr, logger=None, 
+                 inner_steps=100, epoch=0, steps_per_epoch=None, warm_start=15):
   objs = utils.AvgrageMeter()
   top1 = utils.AvgrageMeter()
   top5 = utils.AvgrageMeter()
-
-  for step, (input, target) in enumerate(train_queue):
-    model.train()
+  
+  train_iter = iter(train_queue)
+  valid_iter = iter(valid_queue)
+  search_loader_iter = zip(train_iter, valid_iter)
+  
+  for data_step, ((base_inputs, base_targets), (arch_inputs, arch_targets)) in tqdm(enumerate(search_loader_iter), total = round(len(train_queue)/inner_steps)):
+    if steps_per_epoch is not None and data_step > steps_per_epoch:
+      break    
+    network.train()
     n = input.size(0)
     input = Variable(input, requires_grad=False).cuda()
     target = Variable(target, requires_grad=False).cuda()
 
-    # get a random minibatch from the search queue with replacement
-    input_search, target_search = next(iter(valid_queue))
-    #try:
-    #  input_search, target_search = next(valid_queue_iter)
-    #except:
-    #  valid_queue_iter = iter(valid_queue)
-    #  input_search, target_search = next(valid_queue_iter)
-    input_search = Variable(input_search, requires_grad=False).cuda()
-    target_search = Variable(target_search, requires_grad=False).cuda()
+    all_base_inputs, all_base_targets, all_arch_inputs, all_arch_targets = format_input_data(base_inputs, base_targets, arch_inputs, arch_targets, 
+                                                                                              search_loader_iter, inner_steps=100, args=args)
 
-    if epoch>=15:
-      architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=args.unrolled)
+    # if epoch>=15:
+    #   architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=args.unrolled)
+      
+    network.zero_grad()
+    w_optimizer.zero_grad()
+    
+    model_init = deepcopy(network.state_dict())
+    w_optim_init = deepcopy(w_optimizer.state_dict())
+    
+    for inner_step, (base_inputs, base_targets, arch_inputs, arch_targets) in enumerate(zip(all_base_inputs, all_base_targets, all_arch_inputs, all_arch_targets)):
+        if data_step in [0, 1] and inner_step < 3:
+            print(f"Base targets in the inner loop at inner_step={inner_step}, step={data_step}: {base_targets[0:10]}")
+        logits = network(base_inputs)
+        base_loss = criterion(logits, base_targets)
+        base_loss.backward()
+        w_optimizer.step()
+        w_optimizer.zero_grad()
+              
+              
+    if warm_start is None or (warm_start is not None and epoch >= warm_start):
+      a_optimizer.step()
+      a_optimizer.zero_grad()
+      
+      w_optimizer.zero_grad()
+      architect.optimizer.zero_grad()
+        
+      new_arch = deepcopy(network._arch_parameters)
+      network.load_state_dict(model_init)
+    #   network._arch_parameters = new_arch
+      network.alphas_normal.data = new_arch[0].data
+      network.alphas_reduce.data = new_arch[1].data
+        
+      for inner_step, (base_inputs, base_targets, arch_inputs, arch_targets) in enumerate(zip(all_base_inputs, all_base_targets, all_arch_inputs, all_arch_targets)):
+        if data_step in [0, 1] and inner_step < 3 and epoch % 5 == 0:
+            logger.info(f"Doing weight training for real in higher_loop={args.higher_loop} at inner_step={inner_step}, step={data_step}: {base_targets[0:10]}")
+        logits = network(base_inputs)
+        base_loss = criterion(logits, base_targets)
+        network.zero_grad()
+        base_loss.backward()
+        w_optimizer.step()
+        n = base_inputs.size(0)
 
-    optimizer.zero_grad()
-    logits = model(input)
-    loss = criterion(logits, target)
 
-    loss.backward()
-    nn.utils.clip_grad_norm(model.parameters(), args.grad_clip)
-    optimizer.step()
+        # logits = network(base_inputs)
+        # loss = criterion(logits, base_targets)
 
-    prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
-    objs.update(loss.data[0], n)
-    top1.update(prec1.data[0], n)
-    top5.update(prec5.data[0], n)
+        # loss.backward()
+        # nn.utils.clip_grad_norm_(network.parameters(), args.grad_clip)
+        # w_optimizer.step()
+        # w_optimizer.zero_grad()
+        # architect.optimizer.zero_grad()
 
-    if step % args.report_freq == 0:
-      logging.info('train %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
+        prec1, prec5 = utils.accuracy(logits, base_targets, topk=(1, 5))
+
+        objs.update(base_loss.item(), n)
+        top1.update(prec1.data, n)
+        top5.update(prec5.data, n)
+
+      if data_step % args.report_freq == 0:
+        logging.info('train %03d %e %f %f', data_step, objs.avg, top1.avg, top5.avg)
+    else:
+      a_optimizer.zero_grad()
+      w_optimizer.zero_grad()
 
   return top1.avg, objs.avg
 

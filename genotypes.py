@@ -81,3 +81,7 @@ PC_DARTS_image = Genotype(normal=[('skip_connect', 1), ('sep_conv_3x3', 0), ('se
 
 PCDARTS = PC_DARTS_cifar
 
+def count_ops(genotype):
+  genotype = str(genotype)
+  counts = {op: genotype.count(op) for op in PRIMITIVES}
+  return counts
