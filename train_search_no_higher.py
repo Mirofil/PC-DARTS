@@ -299,7 +299,8 @@ def main():
     print(f"Saved checkpoint to {Path(args.save) / 'checkpoint.pt'}")
 
     # utils.save(model, os.path.join(args.save, 'weights.pt'))
-
+  for log in tqdm(all_logs, desc = "Logging WANDB logs as a whole"):
+    wandb.log(log)
 
 def train_higher(train_queue, valid_queue, network, architect, criterion, w_optimizer, a_optimizer, logger=None, 
                  inner_steps=100, epoch=0, steps_per_epoch=None, warm_start=15):

@@ -281,7 +281,9 @@ def main():
 
     # utils.save(model, os.path.join(args.save, 'weights.pt'))
 
-
+  for log in tqdm(all_logs, desc = "Logging WANDB logs as a whole"):
+    wandb.log(log)
+    
 def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr,epoch):
   objs = utils.AvgrageMeter()
   top1 = utils.AvgrageMeter()
