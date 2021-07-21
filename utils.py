@@ -36,6 +36,10 @@ def accuracy(output, target, topk=(1,)):
     res.append(correct_k.mul_(100.0/batch_size))
   return res
 
+def Random_alpha(model, X, y, epsilon):
+    for p in model.arch_parameters():
+        p.data.add_(torch.zeros_like(p).uniform_(-epsilon, epsilon))
+    model.clip()
 
 class Cutout(object):
     def __init__(self, length):
