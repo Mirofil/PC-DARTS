@@ -397,15 +397,16 @@ def train(train_queue, valid_queue, network, architect, criterion, w_optimizer, 
       
       
       if args.higher_order == "second":
-        stacked_fo_grad = torch.cat([g.view(-1) for g in first_order_grad]).flatten().cpu().numpy()
-        stacked_meta_grad = torch.cat([g.view(-1) for g in avg_meta_grad]).flatten().cpu().numpy()
+        # stacked_fo_grad = torch.cat([g.view(-1) for g in first_order_grad]).flatten().cpu().numpy()
+        # stacked_meta_grad = torch.cat([g.view(-1) for g in avg_meta_grad]).flatten().cpu().numpy()
 
-        hypergrad_meters["first"]["cos"].update(scipy.spatial.distance.cosine(stacked_fo_grad, stacked_meta_grad))
-        hypergrad_meters["first"]["l2"].update(np.linalg.norm(stacked_fo_grad-stacked_meta_grad))
+        # hypergrad_meters["first"]["cos"].update(scipy.spatial.distance.cosine(stacked_fo_grad, stacked_meta_grad))
+        # hypergrad_meters["first"]["l2"].update(np.linalg.norm(stacked_fo_grad-stacked_meta_grad))
         
-        dot_product = np.dot(stacked_fo_grad, stacked_meta_grad)
-        hypergrad_meters["first"]["dot"].update(dot_product)
-        hypergrad_meters["first"]["sign"].update()
+        # dot_product = np.dot(stacked_fo_grad, stacked_meta_grad)
+        # hypergrad_meters["first"]["dot"].update(dot_product)
+        # hypergrad_meters["first"]["sign"].update()
+        pass
       else:
         hypergrad_info = {}
       
