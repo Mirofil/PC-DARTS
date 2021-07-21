@@ -64,6 +64,8 @@ parser.add_argument('--meta_algo' ,       type=str, choices=['reptile', 'metapro
 parser.add_argument('--inner_steps', type=int, default=100, help='Steps for inner loop of bilevel')
 
 
+parser.add_argument('--epsilon_alpha', type=float, default=0.3, help='max epsilon for alpha')
+parser.add_argument('--perturb_alpha', type=str, default=None, help='portion of training data')
 parser.add_argument('--hessian', type=lambda x: False if x in ["False", "false", "", "None", False, None] else True, default=True,
                     help='Warm start one-shot model before starting architecture updates.')
 args = parser.parse_args()
