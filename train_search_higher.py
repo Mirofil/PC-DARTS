@@ -63,6 +63,8 @@ parser.add_argument('--higher_reduction_outer' ,       type=str, choices=['mean'
 parser.add_argument('--meta_algo' ,       type=str, choices=['reptile', 'metaprox', 'darts_higher', "gdas_higher", "setn_higher", "enas_higher"],   default=None, help='Whether to do meta-gradients with respect to the meta-weights or architecture')
 parser.add_argument('--inner_steps', type=int, default=100, help='Steps for inner loop of bilevel')
 
+parser.add_argument('--warm_start', type=int, default=None, help='Warm start for weights before updating architecture')
+parser.add_argument('--inner_steps_same_batch' ,       type=lambda x: False if x in ["False", "false", "", "None", False, None] else True,   default=False, help='Number of steps to do in the inner loop of bilevel meta-learning')
 
 parser.add_argument('--epsilon_alpha', type=float, default=0.3, help='max epsilon for alpha')
 parser.add_argument('--perturb_alpha', type=str, default=None, help='portion of training data')
